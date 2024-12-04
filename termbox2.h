@@ -473,6 +473,7 @@ int tb_height(void);
  * `tb_set_clear_attrs`.
  */
 int tb_clear(void);
+int tb_clear_region(size_t x1, size_t x2);
 int tb_set_clear_attrs(uintattr_t fg, uintattr_t bg);
 
 /* Synchronize the internal back buffer with the terminal by writing to tty. */
@@ -1563,6 +1564,7 @@ static int cell_free(struct tb_cell *cell);
 static int cellbuf_init(struct cellbuf_t *c, int w, int h);
 static int cellbuf_free(struct cellbuf_t *c);
 static int cellbuf_clear(struct cellbuf_t *c);
+static int cellbuf_clear_region(struct cellbuf_t *c, size_t x1, size_t x2);
 static int cellbuf_get(struct cellbuf_t *c, int x, int y, struct tb_cell **out);
 static int cellbuf_in_bounds(struct cellbuf_t *c, int x, int y);
 static int cellbuf_resize(struct cellbuf_t *c, int w, int h);
@@ -1638,6 +1640,11 @@ int tb_height(void) {
 int tb_clear(void) {
     if_not_init_return();
     return cellbuf_clear(&global.back);
+}
+
+int tb_clear_region(size_t x1, size_t x2) {
+    if_not_init_return();
+    return cellbuf_clear_region(&global.back, x1, x2);
 }
 
 int tb_set_clear_attrs(uintattr_t fg, uintattr_t bg) {
@@ -3384,9 +3391,13 @@ static int cellbuf_free(struct cellbuf_t *c) {
 }
 
 static int cellbuf_clear(struct cellbuf_t *c) {
+    return cellbuf_clear_region(c, 0, c->height);
+}
+
+static int cellbuf_clear_region(struct cellbuf_t *c, size_t x1, size_t x2) {
     int rv, i;
     uint32_t space = (uint32_t)' ';
-    for (i = 0; i < c->width * c->height; i++) {
+    for (i = c->width * x1; i < c->width * x2; i++) {
         if_err_return(rv,
             cell_set(&c->cells[i], &space, 1, global.fg, global.bg));
     }
