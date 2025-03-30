@@ -65,7 +65,7 @@ extern "C" {
 
 // __ffi_start
 
-#define TB_VERSION_STR "2.5.0-dev"
+#define TB_VERSION_STR "2.5.0"
 
 /* The following compile-time options are supported:
  *
@@ -1785,11 +1785,11 @@ int tb_extend_cell(int x, int y, uint32_t ch) {
     if_err_return(rv, cellbuf_get(&global.back, x, y, &cell));
     if (cell->nech > 0) { // append to ech
         nech = cell->nech + 1;
-        if_err_return(rv, cell_reserve_ech(cell, nech));
+        if_err_return(rv, cell_reserve_ech(cell, nech + 1));
         cell->ech[nech - 1] = ch;
     } else { // make new ech
         nech = 2;
-        if_err_return(rv, cell_reserve_ech(cell, nech));
+        if_err_return(rv, cell_reserve_ech(cell, nech + 1));
         cell->ech[0] = cell->ch;
         cell->ech[1] = ch;
     }
@@ -1876,7 +1876,7 @@ int tb_print(int x, int y, uintattr_t fg, uintattr_t bg, const char *str) {
 
 int tb_print_ex(int x, int y, uintattr_t fg, uintattr_t bg, size_t *out_w,
     const char *str) {
-    int rv, w, ix;
+    int rv, w, ix, x_prev;
     uint32_t uni;
 
     if_not_init_return();
@@ -1886,6 +1886,7 @@ int tb_print_ex(int x, int y, uintattr_t fg, uintattr_t bg, size_t *out_w,
     }
 
     ix = x;
+    x_prev = x;
     if (out_w) *out_w = 0;
 
     while (*str) {
@@ -1902,6 +1903,7 @@ int tb_print_ex(int x, int y, uintattr_t fg, uintattr_t bg, size_t *out_w,
 
         if (uni == '\n') { // TODO: \r, \t, \v, \f, etc?
             x = ix;
+            x_prev = x;
             y += 1;
             continue;
         } else if (!iswprint((wint_t)uni)) {
@@ -1912,17 +1914,17 @@ int tb_print_ex(int x, int y, uintattr_t fg, uintattr_t bg, size_t *out_w,
         if (w < 0) {
             return TB_ERR;   // shouldn't happen if iswprint
         } else if (w == 0) { // combining character
-            if (cellbuf_in_bounds(&global.back, x - 1, y)) {
-                if_err_return(rv, tb_extend_cell(x - 1, y, uni));
+            if (cellbuf_in_bounds(&global.back, x_prev, y)) {
+                if_err_return(rv, tb_extend_cell(x_prev, y, uni));
             }
         } else {
             if (cellbuf_in_bounds(&global.back, x, y)) {
                 if_err_return(rv, tb_set_cell(x, y, uni, fg, bg));
             }
+            x_prev = x;
+            x += w;
+            if (out_w) *out_w += w;
         }
-
-        x += w;
-        if (out_w) *out_w += w;
     }
 
     return TB_OK;
@@ -3329,7 +3331,7 @@ static int cell_set(struct tb_cell *cell, uint32_t *ch, size_t nch,
     } else {
         int rv;
         if_err_return(rv, cell_reserve_ech(cell, nch + 1));
-        memcpy(cell->ech, ch, sizeof(ch) * nch);
+        memcpy(cell->ech, ch, sizeof(*ch) * nch);
         cell->ech[nch] = '\0';
         cell->nech = nch;
     }
@@ -3345,7 +3347,7 @@ static int cell_reserve_ech(struct tb_cell *cell, size_t n) {
     if (cell->cech >= n) {
         return TB_OK;
     }
-    if (!(cell->ech = tb_realloc(cell->ech, n * sizeof(cell->ch)))) {
+    if (!(cell->ech = (uint32_t*)tb_realloc(cell->ech, n * sizeof(cell->ch)))) {
         return TB_ERR_MEM;
     }
     cell->cech = n;
